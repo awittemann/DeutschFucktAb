@@ -190,6 +190,36 @@
     }
     .reset-link:hover { color: #e53e3e; }
 
+    /* ── Mode toggle ── */
+    .mode-toggle { display:flex; gap:8px; margin-bottom:24px; }
+    .mode-btn {
+      flex:1; padding:11px 8px;
+      border:1.5px solid #e2e8f0; border-radius:10px;
+      font-size:0.88em; font-weight:700; cursor:pointer;
+      font-family:inherit; background:#f7fafc; color:#718096;
+      transition:all 0.15s;
+    }
+    .mode-btn.active {
+      background:linear-gradient(135deg, #2b6cb0, #6b46c1);
+      border-color:transparent; color:#fff;
+      box-shadow:0 2px 10px rgba(43,108,176,0.3);
+    }
+
+    /* ── Multiple choice ── */
+    .mc-options { display:flex; flex-direction:column; gap:10px; margin-bottom:14px; }
+    .mc-btn {
+      width:100%; padding:14px 18px;
+      border:2px solid #e2e8f0; border-radius:10px;
+      font-size:1.15em; font-family:inherit; font-weight:700;
+      background:#f7fafc; color:#1a202c; cursor:pointer;
+      transition:all 0.15s; text-align:center; letter-spacing:0.01em;
+    }
+    .mc-btn:hover:not(:disabled) { border-color:#2b6cb0; background:#ebf4ff; }
+    .mc-btn.mc-correct { border-color:#38a169 !important; background:#f0fff4 !important; color:#276749; }
+    .mc-btn.mc-wrong   { border-color:#e53e3e !important; background:#fff5f5 !important; color:#9b2c2c; }
+    .mc-btn.mc-dim     { opacity:0.4; }
+    .mc-btn:disabled   { cursor:default; }
+
     /* ── Perfect score screen ── */
     .card:has(#s-perfect.active) {
       background: linear-gradient(135deg, #0f2027 0%, #203a43 60%, #1a1a2e 100%);
@@ -255,6 +285,11 @@
       </div>
     </div>
 
+    <div class="mode-toggle">
+      <button class="mode-btn active" id="mode-btn-text" onclick="setMode('text')">✏️ Freitext</button>
+      <button class="mode-btn"        id="mode-btn-mc"   onclick="setMode('mc')">◉ Multiple Choice</button>
+    </div>
+
     <div class="queue-notice" id="queue-notice"></div>
 
     <button class="btn btn-primary" onclick="startRound()">Neue Runde starten (10 Fragen)</button>
@@ -292,6 +327,8 @@
              placeholder="Präteritum-Form eingeben…"
              autocomplete="off" autocorrect="off" spellcheck="false">
     </div>
+
+    <div id="mc-options" class="mc-options" style="display:none"></div>
 
     <div class="feedback-box" id="q-feedback"></div>
 
@@ -383,6 +420,17 @@ function go(id) {
 }
 
 // ──────────────────────────────────────────────────
+// MODE  ('text' | 'mc')
+// ──────────────────────────────────────────────────
+let mode = 'text';
+
+function setMode(m) {
+  mode = m;
+  document.getElementById('mode-btn-text').classList.toggle('active', m === 'text');
+  document.getElementById('mode-btn-mc').classList.toggle('active', m === 'mc');
+}
+
+// ──────────────────────────────────────────────────
 // ROUND STATE
 // ──────────────────────────────────────────────────
 let round = {};
@@ -439,14 +487,22 @@ function showQ() {
   document.getElementById('q-inf').textContent     = `(${verb.inf})`;
   document.getElementById('q-anspron').textContent = pronoun;
 
+  const isMC = mode === 'mc';
+
+  // Text input row
+  document.querySelector('.answer-row').style.display = isMC ? 'none' : 'flex';
   const inp = document.getElementById('q-input');
-  inp.value = ''; inp.className = ''; inp.disabled = false;
-  inp.focus();
+  if (!isMC) { inp.value = ''; inp.className = ''; inp.disabled = false; inp.focus(); }
+
+  // MC options
+  const mcDiv = document.getElementById('mc-options');
+  mcDiv.style.display = isMC ? 'flex' : 'none';
+  if (isMC) renderMCOptions(buildChoices(q.v, q.p));
 
   const fb = document.getElementById('q-feedback');
   fb.className = 'feedback-box'; fb.innerHTML = '';
 
-  document.getElementById('q-btn-check').style.display = 'block';
+  document.getElementById('q-btn-check').style.display = isMC ? 'none' : 'block';
   document.getElementById('q-btn-next').style.display  = 'none';
 }
 
@@ -456,39 +512,100 @@ function showQ() {
 function norm(s) { return s.trim().toLowerCase().replace(/ß/g, 'ss'); }
 
 function checkAnswer() {
-  const q    = round.qs[round.idx];
-  const verb = VERBS[q.v];
-  const [praesens, praeteritum] = verb.f[q.p];
-  const inp  = document.getElementById('q-input');
-  const fb   = document.getElementById('q-feedback');
-
+  const q   = round.qs[round.idx];
+  const inp = document.getElementById('q-input');
+  const [, praeteritum] = VERBS[q.v].f[q.p];
   const isOk = norm(inp.value) === norm(praeteritum);
+  inp.className = isOk ? 'is-ok' : 'is-wrong';
+  inp.disabled  = true;
+  recordAnswer(q.v, q.p, isOk, inp.value.trim() || '–');
+}
+
+// ──────────────────────────────────────────────────
+// SHARED ANSWER RECORDING
+// ──────────────────────────────────────────────────
+function recordAnswer(vi, pi, isOk, given) {
+  const verb = VERBS[vi];
+  const [praesens, praeteritum] = verb.f[pi];
+  const fb = document.getElementById('q-feedback');
 
   if (isOk) {
-    inp.className = 'is-ok';
-    fb.className  = 'feedback-box fb-ok';
+    fb.className   = 'feedback-box fb-ok';
     fb.textContent = 'Richtig!';
     round.ok++;
     document.getElementById('q-live').textContent = `${round.ok} richtig`;
-    // Remove from wrong queue
-    db.wrong = db.wrong.filter(w => !(w.v === q.v && w.p === q.p));
+    db.wrong = db.wrong.filter(w => !(w.v === vi && w.p === pi));
   } else {
-    inp.className = 'is-wrong';
-    fb.className  = 'feedback-box fb-err';
-    fb.innerHTML  = `Nicht ganz. Richtig ist: <strong>${praeteritum}</strong>`;
-    round.mistakes.push({
-      pronoun: P[q.p], praesens, praeteritum,
-      given: inp.value.trim() || '–', inf: verb.inf,
-    });
-    // Add to wrong queue if not already present
-    if (!db.wrong.some(w => w.v === q.v && w.p === q.p)) {
-      db.wrong.push({ v: q.v, p: q.p });
-    }
+    fb.className = 'feedback-box fb-err';
+    fb.innerHTML = `Nicht ganz. Richtig ist: <strong>${praeteritum}</strong>`;
+    round.mistakes.push({ pronoun: P[pi], praesens, praeteritum, given, inf: verb.inf });
+    if (!db.wrong.some(w => w.v === vi && w.p === pi)) db.wrong.push({ v: vi, p: pi });
   }
 
-  inp.disabled = true;
   document.getElementById('q-btn-check').style.display = 'none';
   document.getElementById('q-btn-next').style.display  = 'block';
+}
+
+// ──────────────────────────────────────────────────
+// MULTIPLE CHOICE
+// ──────────────────────────────────────────────────
+function buildChoices(vi, pi) {
+  const verb    = VERBS[vi];
+  const correct = verb.f[pi][1];
+  const seen    = new Set([correct]);
+  const pool    = [];
+
+  // Other pronoun forms of same verb (unique, ≠ correct)
+  for (let p = 0; p < 6; p++) {
+    if (p === pi) continue;
+    const f = verb.f[p][1];
+    if (!seen.has(f)) { seen.add(f); pool.push(f); }
+  }
+
+  // Shuffle pool (Fisher-Yates)
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  const distractors = pool.slice(0, 2);
+
+  // Fallback: borrow from other verbs same pronoun position (very rare)
+  let tries = 0;
+  while (distractors.length < 2 && tries++ < 200) {
+    const f = VERBS[Math.floor(Math.random() * VERBS.length)].f[pi][1];
+    if (!seen.has(f)) { seen.add(f); distractors.push(f); }
+  }
+
+  // Shuffle final 3
+  const all = [correct, ...distractors];
+  for (let i = all.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [all[i], all[j]] = [all[j], all[i]];
+  }
+  return { choices: all, correct };
+}
+
+function renderMCOptions({ choices, correct }) {
+  const wrap = document.getElementById('mc-options');
+  wrap.innerHTML = '';
+  choices.forEach(form => {
+    const btn = document.createElement('button');
+    btn.className   = 'mc-btn';
+    btn.textContent = form;
+    btn.addEventListener('click', () => handleMCClick(btn, form, correct, wrap));
+    wrap.appendChild(btn);
+  });
+}
+
+function handleMCClick(clicked, chosen, correct, wrap) {
+  wrap.querySelectorAll('.mc-btn').forEach(b => {
+    b.disabled = true;
+    if (b.textContent === correct) b.classList.add('mc-correct');
+    else if (b === clicked)        b.classList.add('mc-wrong');
+    else                           b.classList.add('mc-dim');
+  });
+  const q = round.qs[round.idx];
+  recordAnswer(q.v, q.p, chosen === correct, chosen);
 }
 
 function nextQ() {
