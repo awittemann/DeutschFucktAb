@@ -80,6 +80,19 @@
       margin-top: 10px;
       box-shadow: 0 4px 14px rgba(56,161,105,0.3);
     }
+    .btn-errors {
+      background: transparent;
+      border: 1.5px solid #fed7d7;
+      color: #c53030;
+      margin-top: 10px;
+    }
+    .btn-wrong-only {
+      background: linear-gradient(135deg, #c53030, #e53e3e);
+      color: #fff;
+      margin-top: 10px;
+      box-shadow: 0 4px 14px rgba(229,62,62,0.3);
+    }
+    .btn-wrong-only:disabled { opacity: 0.38; cursor: default; filter: none; transform: none; }
 
     /* ── Queue notice ── */
     .queue-notice {
@@ -114,6 +127,9 @@
     .q-pronoun  { font-size: 1.25em; font-weight: 800; color: #2b6cb0; }
     .q-verb     { font-size: 2.4em; font-weight: 900; color: #1a202c; line-height: 1.15; }
     .q-infinitiv{ font-size: 0.85em; color: #a0aec0; margin-top: 6px; }
+    .q-person   { display: inline-block; margin-top: 8px; padding: 3px 10px;
+                  background: rgba(107,70,193,0.12); border-radius: 20px;
+                  font-size: 0.76em; color: #6b46c1; font-weight: 700; letter-spacing: 0.3px; }
 
     /* ── Answer row ── */
     .answer-row {
@@ -183,6 +199,20 @@
     .vg-pre { color: #4a5568; }
     .vg-prt { color: #6b46c1; font-weight: 700; }
 
+    /* ── Error list screen ── */
+    .error-entry {
+      background: #fff5f5; border: 1px solid #fed7d7;
+      border-radius: 12px; padding: 14px 16px; margin-bottom: 10px;
+    }
+    .ee-verb { font-weight: 900; color: #c53030; font-size: 1.05em; margin-bottom: 6px; }
+    .ee-row  { display: flex; align-items: center; gap: 8px; font-size: 0.92em; margin-bottom: 3px; flex-wrap: wrap; }
+    .ee-pronoun     { color: #718096; min-width: 68px; }
+    .ee-praesens    { color: #4a5568; }
+    .ee-arrow       { color: #a0aec0; }
+    .ee-praeteritum { color: #276749; font-weight: 800; }
+    .ee-given-row   { font-size: 0.82em; color: #a0aec0; margin-top: 3px; }
+    .ee-given       { color: #e53e3e; text-decoration: line-through; }
+
     .reset-link {
       display: block; text-align: center; background: none; border: none;
       color: #cbd5e0; font-size: 0.78em; cursor: pointer;
@@ -231,12 +261,18 @@
 
     .reward-photo   { width:100%; border-radius:14px; display:block; margin-bottom:8px;
                       box-shadow:0 10px 40px rgba(0,0,0,0.6); animation:fadeIn 0.7s ease; }
-    .reward-shimmer { width:100%; height:260px; border-radius:14px; margin-bottom:8px;
+    .reward-shimmer { width:100%; height:220px; border-radius:14px; margin-bottom:8px;
                       background:linear-gradient(90deg, #2d3748 25%, #3d4a5e 50%, #2d3748 75%);
+                      background-size:600px 100%; animation:shimmer 1.5s infinite; }
+    .reward-shimmer-light { width:100%; height:200px; border-radius:14px; margin-bottom:8px;
+                      background:linear-gradient(90deg, #e2e8f0 25%, #edf2f7 50%, #e2e8f0 75%);
                       background-size:600px 100%; animation:shimmer 1.5s infinite; }
     .reward-credit  { text-align:right; font-size:0.7em; color:#4a5568; margin-bottom:16px; }
     .reward-credit a{ color:#718096; text-decoration:none; }
     .reward-error   { text-align:center; padding:28px 0 20px; color:#718096; font-size:0.88em; }
+
+    /* Reward photo in summary medal area */
+    .medal-area .reward-photo { box-shadow:0 6px 24px rgba(0,0,0,0.18); }
 
     .btn-gold         { background:linear-gradient(135deg, #975a16, #f6e05e); color:#1a1a2e; font-weight:900;
                         box-shadow:0 4px 18px rgba(246,224,94,0.35); }
@@ -292,7 +328,9 @@
 
     <div class="queue-notice" id="queue-notice"></div>
 
-    <button class="btn btn-primary" onclick="startRound()">Neue Runde starten (10 Fragen)</button>
+    <button class="btn btn-primary" onclick="startRound(false)">Neue Runde starten (10 Fragen)</button>
+    <button class="btn btn-wrong-only" id="btn-wrong-only" onclick="startRound(true)" disabled>🎯 Nur Fehler üben (<span id="wrong-count">0</span>)</button>
+    <button class="btn btn-errors" id="btn-errors" onclick="showErrors()" style="display:none">📋 Fehlerliste (<span id="error-count">0</span>)</button>
     <button class="btn btn-outline" onclick="showVerbList()">Alle 20 Verben anzeigen</button>
     <button class="reset-link" onclick="resetAll()">Fortschritt zurücksetzen</button>
   </div>
@@ -319,6 +357,7 @@
       <div class="q-pronoun" id="q-pronoun">ich</div>
       <div class="q-verb"    id="q-verb">gehe</div>
       <div class="q-infinitiv" id="q-inf">(gehen)</div>
+      <div class="q-person" id="q-person"></div>
     </div>
 
     <div class="answer-row">
@@ -343,7 +382,7 @@
       <div class="sum-pct"      id="sum-pct">80% richtig</div>
     </div>
 
-    <div class="medal-area">
+    <div class="medal-area" id="sum-medal-area">
       <span class="medal-emoji" id="sum-icon"></span>
       <div class="medal-label"  id="sum-label"></div>
     </div>
@@ -353,8 +392,17 @@
       <div id="sum-wrong-list"></div>
     </div>
 
-    <button class="btn btn-primary" onclick="startRound()" style="margin-top:22px">Nächste Runde</button>
+    <button class="btn btn-primary" onclick="startRound(false)" style="margin-top:22px">Nächste Runde</button>
     <button class="btn btn-outline" onclick="updateStart(); go('s-start')">Zur Startseite</button>
+  </div>
+
+  <!-- ═══════════════ ERROR LIST ═══════════════ -->
+  <div id="s-errors" class="screen">
+    <h2>Fehlerliste</h2>
+    <p class="subtitle" id="error-list-subtitle"></p>
+    <div class="verb-scroll" id="error-list-container"></div>
+    <button class="btn btn-wrong-only" id="err-practice-btn" onclick="startRound(true)" style="margin-top:0">🎯 Diese Fehler üben</button>
+    <button class="btn btn-outline" onclick="updateStart(); go('s-start')" style="margin-top:10px">← Zurück</button>
   </div>
 
   <!-- ═══════════════ PERFECT ═══════════════ -->
@@ -362,10 +410,10 @@
     <div class="perfect-header">
       <span class="perfect-crown">👑</span>
       <div class="perfect-title">PERFEKT!</div>
-      <div class="perfect-sub">Alle 10 richtig – du bist unschlagbar!</div>
+      <div class="perfect-sub">Alle richtig – du bist unschlagbar!</div>
     </div>
     <div id="reward-area"></div>
-    <button class="btn btn-gold" onclick="startRound()">Nächste Runde</button>
+    <button class="btn btn-gold" onclick="startRound(false)">Nächste Runde</button>
     <button class="btn btn-dark-outline" onclick="go('s-summary')">Ergebnis anzeigen</button>
   </div>
 
@@ -377,6 +425,14 @@
 // Reihenfolge: ich · du · er/sie/es · wir · ihr · sie
 // ──────────────────────────────────────────────────
 const P = ['ich','du','er/sie/es','wir','ihr','sie'];
+const PERSON_INFO = [
+  '1. Person · Singular',
+  '2. Person · Singular',
+  '3. Person · Singular',
+  '1. Person · Plural',
+  '2. Person · Plural',
+  '3. Person · Plural',
+];
 
 const VERBS = [
   { inf:'sein',    f:[['bin','war'],['bist','warst'],['ist','war'],['sind','waren'],['seid','wart'],['sind','waren']] },
@@ -411,6 +467,9 @@ function load() { try { return JSON.parse(localStorage.getItem(KEY)) || mkEmpty(
 function save() { localStorage.setItem(KEY, JSON.stringify(db)); }
 let db = load();
 
+// Cached reward photo HTML (set during showPerfect)
+let rewardPhotoHTML = null;
+
 // ──────────────────────────────────────────────────
 // NAVIGATION
 // ──────────────────────────────────────────────────
@@ -435,13 +494,24 @@ function setMode(m) {
 // ──────────────────────────────────────────────────
 let round = {};
 
-function startRound() {
-  round = { qs: buildQuestions(), idx: 0, ok: 0, mistakes: [] };
+function startRound(wrongOnly) {
+  round = { qs: buildQuestions(wrongOnly || false), idx: 0, ok: 0, mistakes: [] };
   go('s-question');
   showQ();
 }
 
-function buildQuestions() {
+function buildQuestions(wrongOnly) {
+  if (wrongOnly) {
+    if (db.wrong.length === 0) return buildQuestions(false);
+    const qs = db.wrong.map(w => ({ v: w.v, p: w.p }));
+    // Shuffle (Fisher-Yates)
+    for (let i = qs.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [qs[i], qs[j]] = [qs[j], qs[i]];
+    }
+    return qs.slice(0, 10);
+  }
+
   const qs = [];
   const used = new Set();
 
@@ -485,6 +555,7 @@ function showQ() {
   document.getElementById('q-pronoun').textContent = pronoun;
   document.getElementById('q-verb').textContent    = praesens;
   document.getElementById('q-inf').textContent     = `(${verb.inf})`;
+  document.getElementById('q-person').textContent  = PERSON_INFO[q.p];
   document.getElementById('q-anspron').textContent = pronoun;
 
   const isMC = mode === 'mc';
@@ -534,13 +605,24 @@ function recordAnswer(vi, pi, isOk, given) {
     fb.textContent = 'Richtig!';
     round.ok++;
     document.getElementById('q-live').textContent = `${round.ok} richtig`;
+    // Remove from error list when answered correctly
     db.wrong = db.wrong.filter(w => !(w.v === vi && w.p === pi));
   } else {
     fb.className = 'feedback-box fb-err';
     fb.innerHTML = `Nicht ganz. Richtig ist: <strong>${praeteritum}</strong>`;
     round.mistakes.push({ pronoun: P[pi], praesens, praeteritum, given, inf: verb.inf });
-    if (!db.wrong.some(w => w.v === vi && w.p === pi)) db.wrong.push({ v: vi, p: pi });
+    // Update or add to persistent error list
+    const today    = new Date().toLocaleDateString('de-DE');
+    const existing = db.wrong.find(w => w.v === vi && w.p === pi);
+    if (existing) {
+      existing.lastGiven = given;
+      existing.lastDate  = today;
+    } else {
+      db.wrong.push({ v: vi, p: pi, lastGiven: given, lastDate: today });
+    }
   }
+
+  save(); // persist error list after every answer
 
   document.getElementById('q-btn-check').style.display = 'none';
   document.getElementById('q-btn-next').style.display  = 'block';
@@ -649,7 +731,7 @@ function finishRound() {
   document.getElementById('sum-label').textContent = label;
   document.getElementById('sum-label').style.color = color;
 
-  // Wrong-answer list
+  // Wrong-answer list for this round
   const wrongArea = document.getElementById('sum-wrong-area');
   const wrongList = document.getElementById('sum-wrong-list');
   if (round.mistakes.length > 0) {
@@ -679,8 +761,21 @@ async function showPerfect() {
   go('s-perfect');
   launchConfetti();
 
+  // Show loading shimmer in the summary medal area (for when user navigates there)
+  document.getElementById('sum-medal-area').innerHTML =
+    '<div class="reward-shimmer-light"></div>' +
+    '<div class="medal-label" style="color:#b7950b;margin-top:4px">Goldmedaille – Perfekt!</div>';
+
   const area = document.getElementById('reward-area');
-  if (!UNSPLASH_KEY) { area.innerHTML = ''; return; }
+  if (!UNSPLASH_KEY) {
+    area.innerHTML = '';
+    rewardPhotoHTML = '';
+    // Restore emoji fallback in summary
+    document.getElementById('sum-medal-area').innerHTML =
+      '<span class="medal-emoji">🥇</span>' +
+      '<div class="medal-label" style="color:#b7950b">Goldmedaille – Perfekt!</div>';
+    return;
+  }
 
   area.innerHTML = '<div class="reward-shimmer"></div>';
   try {
@@ -689,14 +784,22 @@ async function showPerfect() {
     );
     if (!res.ok) throw new Error(res.status);
     const d = await res.json();
-    area.innerHTML =
+    rewardPhotoHTML =
       '<img class="reward-photo" src="' + d.urls.regular + '" alt="Belohnung">' +
       '<div class="reward-credit">Foto: <a href="' + d.user.links.html +
       '?utm_source=praeteritum_trainer&utm_medium=referral" target="_blank" rel="noopener">' +
       d.user.name + '</a> auf Unsplash</div>';
+    area.innerHTML = rewardPhotoHTML;
+    // Also update the summary medal area with the photo
+    document.getElementById('sum-medal-area').innerHTML = rewardPhotoHTML;
   } catch {
+    rewardPhotoHTML = '';
     area.innerHTML = '<div class="reward-error">Foto konnte nicht geladen werden.<br>' +
       '<small>Unsplash API Key korrekt gesetzt?</small></div>';
+    // Restore emoji fallback in summary
+    document.getElementById('sum-medal-area').innerHTML =
+      '<span class="medal-emoji">🥇</span>' +
+      '<div class="medal-label" style="color:#b7950b">Goldmedaille – Perfekt!</div>';
   }
 }
 
@@ -719,6 +822,48 @@ function launchConfetti() {
     wrap.appendChild(el);
   }
   setTimeout(() => wrap.remove(), 6000);
+}
+
+// ──────────────────────────────────────────────────
+// ERROR LIST SCREEN
+// ──────────────────────────────────────────────────
+function showErrors() {
+  const container = document.getElementById('error-list-container');
+  const subtitle  = document.getElementById('error-list-subtitle');
+  const practBtn  = document.getElementById('err-practice-btn');
+  const n         = db.wrong.length;
+
+  subtitle.textContent = n > 0
+    ? `${n} Verb-Form${n !== 1 ? 'en' : ''} mit Fehlern`
+    : 'Noch keine Fehler – super!';
+
+  practBtn.style.display = n > 0 ? 'block' : 'none';
+
+  if (n === 0) {
+    container.innerHTML =
+      '<div style="text-align:center;color:#718096;padding:28px 0;font-size:0.95em">🎉 Keine Fehler in der Liste!</div>';
+  } else {
+    container.innerHTML = db.wrong.map(w => {
+      const verb     = VERBS[w.v];
+      const pronoun  = P[w.p];
+      const praesens = verb.f[w.p][0];
+      const correct  = verb.f[w.p][1];
+      const givenRow = w.lastGiven
+        ? `<div class="ee-given-row">Zuletzt: <span class="ee-given">${w.lastGiven}</span>${w.lastDate ? ' · ' + w.lastDate : ''}</div>`
+        : '';
+      return `<div class="error-entry">
+        <div class="ee-verb">${verb.inf}</div>
+        <div class="ee-row">
+          <span class="ee-pronoun">${pronoun}</span>
+          <span class="ee-praesens">${praesens}</span>
+          <span class="ee-arrow">→</span>
+          <span class="ee-praeteritum">${correct}</span>
+        </div>
+        ${givenRow}
+      </div>`;
+    }).join('');
+  }
+  go('s-errors');
 }
 
 // ──────────────────────────────────────────────────
@@ -752,13 +897,24 @@ function updateStart() {
   document.getElementById('st-pct').textContent    =
     db.total > 0 ? Math.round(db.correct / db.total * 100) + '%' : '–';
 
+  const n      = db.wrong.length;
   const notice = document.getElementById('queue-notice');
-  if (db.wrong.length > 0) {
+  if (n > 0) {
     notice.style.display = 'block';
-    notice.textContent   = `${db.wrong.length} falsch beantwortete Fragen werden in der nächsten Runde priorisiert`;
+    notice.textContent   = `${n} falsch beantwortete Fragen werden in der nächsten Runde priorisiert`;
   } else {
     notice.style.display = 'none';
   }
+
+  // "Nur Fehler üben" button
+  const wrongOnlyBtn = document.getElementById('btn-wrong-only');
+  wrongOnlyBtn.disabled = n === 0;
+  document.getElementById('wrong-count').textContent = n;
+
+  // "Fehlerliste" button
+  const errBtn = document.getElementById('btn-errors');
+  errBtn.style.display = n > 0 ? 'block' : 'none';
+  document.getElementById('error-count').textContent = n;
 }
 
 // ──────────────────────────────────────────────────
